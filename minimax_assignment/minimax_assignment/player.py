@@ -100,6 +100,10 @@ class PlayerControllerMinimax(PlayerController):
             return score_diff + scores[0] - scores[1]
 
         else:
+
+            # move ordering - the move same as previous move first
+            children.sort(key=lambda x: (x.move - node.move) ** 2, reverse=False)
+
             if state.get_player() == 0:
                 v = -1e6
                 for child in children:
@@ -138,7 +142,7 @@ class PlayerControllerMinimax(PlayerController):
         global start_time
         for child in child_nodes:
             start_time = time.time()
-            child_v.append(self.alphabeta(child, 2, -1e6, 1e6))
+            child_v.append(self.alphabeta(child, 4, -1e6, 1e6))
 
         bestMove = (child_nodes[child_v.index(max(child_v))]).move
         return ACTION_TO_STR[bestMove]
