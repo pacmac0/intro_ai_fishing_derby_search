@@ -7,6 +7,9 @@ from fishing_game_core.player_utils import PlayerController
 from fishing_game_core.shared import ACTION_TO_STR
 
 
+global best_move
+best_move = 0
+
 class PlayerControllerHuman(PlayerController):
     def player_loop(self):
         """
@@ -38,7 +41,7 @@ class PlayerControllerMinimax(PlayerController):
 
         # Generate game tree object
         first_msg = self.receiver() # initial fish in the scenario
-        # Initialize your minimax model
+        # Initialize your minimax model use model as a memory
         model = self.initialize_model(initial_data=first_msg)
 
         while True:
@@ -49,10 +52,10 @@ class PlayerControllerMinimax(PlayerController):
 
             # Create the root node of the game tree
             node = Node(message=msg, player=0)
+            # TODO update model with new nodes
 
             # Possible next moves: "stay", "left", "right", "up", "down"
-            best_move = self.search_best_next_move(
-                model=model, initial_tree_node=node)
+            best_move = self.search_best_next_move(model=model, initial_tree_node=node)
 
             # Execute next action
             self.sender({"action": best_move, "search_time": None})
@@ -74,8 +77,37 @@ class PlayerControllerMinimax(PlayerController):
 
         Please note that the number of fishes and their types is not fixed between test cases.
         """
+
+
         # EDIT THIS METHOD TO RETURN A MINIMAX MODEL ###
         return None
+
+    def  minimaxAlphabeta(self, node, depth, alpha, beta, player):
+        if (depth == 0) or (len(node.compute_and_get_children())) == 0: # terminal state
+            v = node.state.player_scores[0] - node.state.player_scores[1] # TODO use a heuristic to score the state
+        elif player == 0: # no terminal state
+            v = {'eval':-float('inf'),
+                 'move':0}
+            for child in node.children:
+                v = max(v, self.minimaxAlphabeta(child, depth-1, alpha, beta, 1))
+                alpha = max(alpha, v)
+                if beta <= alpha:
+                    break # beta prune
+                best_move = child.move
+            
+        else: # player == 1
+            v = {'eval':float('inf'),
+                 'move':0}
+            for child in node.children:
+                v = min(v, self.minimaxAlphabeta(child, depth-1, alpha, beta, 0))
+                beta = min(beta, v)
+                if beta <= alpha:
+                    break # alpha prune
+                best_move = child.move
+        print(v)
+        return v
+
+
 
     def search_best_next_move(self, model, initial_tree_node):
         """
@@ -93,6 +125,19 @@ class PlayerControllerMinimax(PlayerController):
         
         # NOTE: Don't forget to initialize the children of the current node 
         #       with its compute_and_get_children() method!
+
+
+        _ = self.minimaxAlphabeta(initial_tree_node, 
+                            3, # depth
+                            initial_tree_node.state.player_scores[0] - initial_tree_node.state.player_scores[1], # alpha
+                            initial_tree_node.state.player_scores[1] - initial_tree_node.state.player_scores[0], # beta
+                            initial_tree_node.player)
+        
+        print(best_move)
+        print()
+        
+        #return ACTION_TO_STR[move[0]]
+
 
         random_move = random.randrange(5)
         return ACTION_TO_STR[random_move]
