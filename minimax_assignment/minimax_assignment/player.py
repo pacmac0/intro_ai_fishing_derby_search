@@ -6,6 +6,9 @@ from fishing_game_core.game_tree import Node
 from fishing_game_core.player_utils import PlayerController
 from fishing_game_core.shared import ACTION_TO_STR
 
+import time
+import math
+
 
 global best_move
 best_move = 0
@@ -78,33 +81,72 @@ class PlayerControllerMinimax(PlayerController):
         Please note that the number of fishes and their types is not fixed between test cases.
         """
 
+        # EDIT THIS METHOD TO RETURN A MINIMAX MODEL ### 
+        # init the hash table for zobrist hashing
 
-        # EDIT THIS METHOD TO RETURN A MINIMAX MODEL ###
-        return None
+        # get number different fish type
+        del initial_data['game_over']
+        types = [initial_data[fish]['type'] for fish in initial_data]
+        types = set(types)
+        
+        # init the zobrist table
+        zobristTable = [[[0 for _ in range(len(types)+2)] for _ in range(20)] for _ in range(20)]
+        for i in range(len(zobristTable)): # x position
+            for j in range(len(zobristTable[0])):  # y position
+                for t in range(len(zobristTable[0][0])):  # fish type + hooks
+                    zobristTable[i][j][t] = random.randint(0, 100000000)
+        
+        return zobristTable
 
-    def  minimaxAlphabeta(self, node, depth, alpha, beta, player):
-        if (depth == 0) or (len(node.compute_and_get_children())) == 0: # terminal state
-            v = node.state.player_scores[0] - node.state.player_scores[1] # TODO use a heuristic to score the state
-        elif player == 0: # no terminal state
-            v = {'eval':-float('inf'),
-                 'move':0}
-            for child in node.children:
-                v = max(v, self.minimaxAlphabeta(child, depth-1, alpha, beta, 1))
+    def alphabeta(self, node, depth, alpha, beta, model):
+        
+        state = node.state
+        children = node.compute_and_get_children()
+        # we could delete the child with illigal move if the enemy is nect to us and we cant move that way
+
+        # if max depth reached, end of game (terminate state) reached, time was just tried out
+        if depth == 0 or (not children): # or (time.time() - start_time > 0.65)
+            
+            fish_pos = state.get_fish_positions()
+            fish_score = state.get_fish_scores()
+            hook_pos = state.get_hook_positions()
+            scores = state.get_player_scores()
+            
+            # RSC uses model
+            if 
+            
+
+            # evaluation function
+            score_diff = 0
+            for f in fish_pos.keys():
+                if fish_score[f] < 0 and (hook_pos[0] == fish_pos[f]): 
+                    score_diff += fish_score[f]
+                else:   
+                    score_diff += (fish_score[f] / (1 + shortest_distance_squared(hook_pos[0], fish_pos[f]))
+                                    - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f])))
+            """
+            score_diff = sum([(fish_score[f] / (1 + shortest_distance_squared(hook_pos[0], fish_pos[f])) - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f]))) for f in fish_pos.keys()])
+            """
+            
+            return score_diff + scores[0] - scores[1]
+
+        # move ordering, to evaluate the states with the same move as the previous state first
+        children.sort(key=lambda x: (x.move - node.move) ** 2, reverse=False)
+
+        if state.get_player() == 0:
+            v = -float('inf')
+            for child in children:
+                v = max(v, self.alphabeta(child, depth - 1, alpha, beta))
                 alpha = max(alpha, v)
                 if beta <= alpha:
-                    break # beta prune
-                best_move = child.move
-            
-        else: # player == 1
-            v = {'eval':float('inf'),
-                 'move':0}
-            for child in node.children:
-                v = min(v, self.minimaxAlphabeta(child, depth-1, alpha, beta, 0))
+                    break
+        else:
+            v = float('inf')
+            for child in children:
+                v = min(v, self.alphabeta(child, depth - 1, alpha, beta))
                 beta = min(beta, v)
                 if beta <= alpha:
-                    break # alpha prune
-                best_move = child.move
-        print(v)
+                    break
         return v
 
 
@@ -125,19 +167,20 @@ class PlayerControllerMinimax(PlayerController):
         
         # NOTE: Don't forget to initialize the children of the current node 
         #       with its compute_and_get_children() method!
-
-
-        _ = self.minimaxAlphabeta(initial_tree_node, 
-                            3, # depth
-                            initial_tree_node.state.player_scores[0] - initial_tree_node.state.player_scores[1], # alpha
-                            initial_tree_node.state.player_scores[1] - initial_tree_node.state.player_scores[0], # beta
-                            initial_tree_node.player)
         
-        print(best_move)
-        print()
+        child_nodes = initial_tree_node.compute_and_get_children()
+        child_v = []
+        # iterative deepening
+        start_time = time.time()
+        depth_level = 1
+        while (time.time() - start_time) < 0.5 and depth_level <= 3:
+            child_v = []
+
+            for child in child_nodes:
+                child_v.append(self.alphabeta(child, depth_level, -float('inf'), float('inf'), model))
+            
+            bestMove = (child_nodes[child_v.index(max(child_v))]).move
+            depth_level += 1
         
-        #return ACTION_TO_STR[move[0]]
+        return ACTION_TO_STR[bestMove]
 
-
-        random_move = random.randrange(5)
-        return ACTION_TO_STR[random_move]
