@@ -9,9 +9,13 @@ from fishing_game_core.shared import ACTION_TO_STR
 import time
 import math
 
+# global variables for RSC (repetive state checking)
+fish_to_type = {}
+zobristTable = []
+lookUpTable = dict()
 
-global best_move
-best_move = 0
+def shortest_distance_squared(pos1, pos2):
+    return min((pos1[0] - pos2[0]) ** 2, (pos1[0] - pos2[0] - 20) ** 2) + (pos1[1] - pos2[1]) ** 2
 
 class PlayerControllerHuman(PlayerController):
     def player_loop(self):
@@ -89,16 +93,25 @@ class PlayerControllerMinimax(PlayerController):
         types = [initial_data[fish]['type'] for fish in initial_data]
         types = set(types)
         
+        global fish_to_type
+        fish_to_type = {''.join(c for c in k if c.isdigit()):v['type'] for (k,v) in initial_data.items()}
+
+        d = {k: v for k, v in zip(types, [0 for _ in range(len(types))])}
+        d.update(dict(h1=0))
+        d.update(dict(h2=0))
+        
         # init the zobrist table
-        zobristTable = [[[0 for _ in range(len(types)+2)] for _ in range(20)] for _ in range(20)]
+        global zobristTable
+        zobristTable = [[d.copy() for _ in range(20)] for _ in range(20)]
+        
         for i in range(len(zobristTable)): # x position
             for j in range(len(zobristTable[0])):  # y position
-                for t in range(len(zobristTable[0][0])):  # fish type + hooks
-                    zobristTable[i][j][t] = random.randint(0, 100000000)
-        
-        return zobristTable
+                for key in d.keys():  # fish type + hooks
+                    zobristTable[i][j][key] = random.randint(0, 1000000000)
 
-    def alphabeta(self, node, depth, alpha, beta, model):
+        return None
+
+    def alphabeta(self, node, depth, alpha, beta):
         
         state = node.state
         children = node.compute_and_get_children()
@@ -111,24 +124,47 @@ class PlayerControllerMinimax(PlayerController):
             fish_score = state.get_fish_scores()
             hook_pos = state.get_hook_positions()
             scores = state.get_player_scores()
-            
-            # RSC uses model
-            if 
-            
 
-            # evaluation function
-            score_diff = 0
-            for f in fish_pos.keys():
-                if fish_score[f] < 0 and (hook_pos[0] == fish_pos[f]): 
-                    score_diff += fish_score[f]
-                else:   
-                    score_diff += (fish_score[f] / (1 + shortest_distance_squared(hook_pos[0], fish_pos[f]))
-                                    - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f])))
-            """
-            score_diff = sum([(fish_score[f] / (1 + shortest_distance_squared(hook_pos[0], fish_pos[f])) - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f]))) for f in fish_pos.keys()])
-            """
+            # RSC
+            """ 
+            print(fish_pos) # {0: (7, 19), 1: (5, 15), 4: (19, 6)} with key = fish_number
+            print(hook_pos) # {0: (8, 19), 1: (9, 16)}
+            print(fish_to_type) # {'0': 11, '1': 1, '2': 10, '3': 1, '4': 11}
             
-            return score_diff + scores[0] - scores[1]
+            for fish_id, coordinates in fish_pos.items():
+                print("fish {} is at {},{} ad has type {}".format(fish_id, coordinates[0], coordinates[1], fish_to_type[str(fish_id)]))
+            """
+            # calculate key-value of state
+            key = 0
+            for fish_id, coordinates in fish_pos.items():
+                # get fish-type to look up zobrist value
+                key ^= zobristTable[ coordinates[0] ][ coordinates[1] ][ fish_to_type[str(fish_id)] ]
+            # XOR with the hook positions
+            key ^= zobristTable[ hook_pos[0][0] ][ hook_pos[0][1] ][ 'h1' ]
+            key ^= zobristTable[ hook_pos[1][0] ][ hook_pos[1][1] ][ 'h2' ]
+            
+            # check table for state
+            global lookUpTable
+            if key in lookUpTable.keys():
+                return lookUpTable[key]
+            else:
+                # compute score and store with key in look up table
+
+                # evaluation function
+                score_diff = 0
+                for f in fish_pos.keys():
+                    if fish_score[f] < 0 and (hook_pos[0] == fish_pos[f]): 
+                        score_diff += fish_score[f]
+                    else:   
+                        score_diff += (fish_score[f] / (1 + shortest_distance_squared(hook_pos[0], fish_pos[f]))
+                                        - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f])))
+                """
+                score_diff = sum([(fish_score[f] / (1 + shortest_distance_squared(hook_pos[0], fish_pos[f])) - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f]))) for f in fish_pos.keys()])
+                """
+                score = score_diff + scores[0] - scores[1]
+                # store in look up table
+                lookUpTable[key] = score
+                return score
 
         # move ordering, to evaluate the states with the same move as the previous state first
         children.sort(key=lambda x: (x.move - node.move) ** 2, reverse=False)
@@ -173,11 +209,11 @@ class PlayerControllerMinimax(PlayerController):
         # iterative deepening
         start_time = time.time()
         depth_level = 1
-        while (time.time() - start_time) < 0.5 and depth_level <= 3:
+        while (time.time() - start_time) < 0.5 and depth_level <= 4:
             child_v = []
 
             for child in child_nodes:
-                child_v.append(self.alphabeta(child, depth_level, -float('inf'), float('inf'), model))
+                child_v.append(self.alphabeta(child, depth_level, -float('inf'), float('inf')))
             
             bestMove = (child_nodes[child_v.index(max(child_v))]).move
             depth_level += 1
