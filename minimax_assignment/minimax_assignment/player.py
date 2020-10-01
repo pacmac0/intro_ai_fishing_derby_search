@@ -14,6 +14,9 @@ fish_to_type = {}
 zobristTable = []
 lookUpTable = dict()
 
+start_time = 0
+time_limit = 60 # 2 digits!
+
 def shortest_distance_squared(pos1, pos2):
     return min((pos1[0] - pos2[0]) ** 2, (pos1[0] - pos2[0] - 20) ** 2) + (pos1[1] - pos2[1]) ** 2
 
@@ -56,11 +59,14 @@ class PlayerControllerMinimax(PlayerController):
             """
             {'game_over': False, 'hooks_positions': {0: (6, 8), 1: (9, 17)}, 'fishes_positions': {0: (6, 17), 4: (1, 9)}, ... , 'fish_scores': {0: 11, 4: 11}, 'player_scores': {0: 0, 1: 14}, 'caught_fish': {0: None, 1: None}}
             """
-
+            
             # Create the root node of the game tree
             node = Node(message=msg, player=0)
             # TODO update model with new nodes
-
+            global lookUpTable
+            if any(c is not None for c in node.state.get_caught()) and len(lookUpTable) > 0:
+                lookUpTable = dict()
+            
             # Possible next moves: "stay", "left", "right", "up", "down"
             best_move = self.search_best_next_move(model=model, initial_tree_node=node)
 
@@ -118,7 +124,7 @@ class PlayerControllerMinimax(PlayerController):
         # we could delete the child with illigal move if the enemy is nect to us and we cant move that way
 
         # if max depth reached, end of game (terminate state) reached, time was just tried out
-        if depth == 0 or (not children): # or (time.time() - start_time > 0.65)
+        if (time.time() - start_time) >= time_limit*pow(10,-3) or depth == 0 or (not children): # or (time.time() - start_time) < 65*pow(10,-3)
             
             fish_pos = state.get_fish_positions()
             fish_score = state.get_fish_scores()
@@ -146,12 +152,14 @@ class PlayerControllerMinimax(PlayerController):
             # check table for state
             global lookUpTable
             if key in lookUpTable.keys():
+                #print("used look up!!!!!!!!!!!!")
                 return lookUpTable[key]
             else:
                 # compute score and store with key in look up table
-
+            
                 # evaluation function
                 score_diff = 0
+                
                 for f in fish_pos.keys():
                     if fish_score[f] < 0 and (hook_pos[0] == fish_pos[f]): 
                         score_diff += fish_score[f]
@@ -161,10 +169,11 @@ class PlayerControllerMinimax(PlayerController):
                 """
                 score_diff = sum([(fish_score[f] / (1 + shortest_distance_squared(hook_pos[0], fish_pos[f])) - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f]))) for f in fish_pos.keys()])
                 """
+                # print("computed value---------------")
                 score = score_diff + scores[0] - scores[1]
                 # store in look up table
                 lookUpTable[key] = score
-                return score
+            return score
 
         # move ordering, to evaluate the states with the same move as the previous state first
         children.sort(key=lambda x: (x.move - node.move) ** 2, reverse=False)
@@ -206,17 +215,30 @@ class PlayerControllerMinimax(PlayerController):
         
         child_nodes = initial_tree_node.compute_and_get_children()
         child_v = []
+        prevBestMovesVal = -100000
+        bestMove = 0
         # iterative deepening
+        global start_time
         start_time = time.time()
         depth_level = 1
-        while (time.time() - start_time) < 0.5 and depth_level <= 4:
-            child_v = []
 
+        #print(len(lookUpTable))
+        
+        while (time.time() - start_time) < time_limit*pow(10,-3): # and depth_level <= 4:
+            child_v = []
             for child in child_nodes:
                 child_v.append(self.alphabeta(child, depth_level, -float('inf'), float('inf')))
             
-            bestMove = (child_nodes[child_v.index(max(child_v))]).move
+            # check if partially checked tree returns better result then previous iteration
+            max_val_of_current_iteration = max(child_v)
+            
+            if max_val_of_current_iteration > prevBestMovesVal:
+                prevBestMovesVal = max_val_of_current_iteration
+                bestMove = (child_nodes[child_v.index(max_val_of_current_iteration)]).move
+            
+            #bestMove = (child_nodes[child_v.index(max_return)]).move
             depth_level += 1
         
+        print(depth_level)
         return ACTION_TO_STR[bestMove]
 
