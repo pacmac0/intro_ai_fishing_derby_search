@@ -13,17 +13,14 @@ import math
 fish_to_type = {}
 zobristTable = []
 lookUpTable = dict()
-# variables for iterative deepening
+
 start_time = 0
-time_limit = 55 # 2 digits!
+time_limit = 40 # 2 digits!
 max_score = 0
-# variables for move ordering
-sorting_lookup = {
-                    0:[2,1,3,4,0],
-                    1:[1,3,4,0,2],
-                    2:[2,3,4,0,1],
-                    3:[3,1,2,0,4],
-                    4:[4,1,2,0,3]}
+time_out = False
+
+def shortest_distance_squared(pos1, pos2):
+    return min((pos1[0] - pos2[0]) ** 2, (pos1[0] - pos2[0] - 20) ** 2) + (pos1[1] - pos2[1]) ** 2
 
 class PlayerControllerHuman(PlayerController):
     def player_loop(self):
@@ -67,7 +64,7 @@ class PlayerControllerMinimax(PlayerController):
             
             # Create the root node of the game tree
             node = Node(message=msg, player=0)
-            # drop look up table if states (because number of fish changed) cant accure anymore
+            # TODO update model with new nodes
             global lookUpTable
             if any(c is not None for c in node.state.get_caught()) and len(lookUpTable) > 0:
                 lookUpTable = dict()
@@ -98,6 +95,7 @@ class PlayerControllerMinimax(PlayerController):
 
         # EDIT THIS METHOD TO RETURN A MINIMAX MODEL ### 
         # init the hash table for zobrist hashing
+
         # get number different fish type
         del initial_data['game_over']
         types = [initial_data[fish]['type'] for fish in initial_data]
@@ -126,22 +124,36 @@ class PlayerControllerMinimax(PlayerController):
         return None
 
     def alphabeta(self, node, depth, alpha, beta):
+        
         state = node.state
         children = node.compute_and_get_children()
-
         # move ordering, to evaluate the states with the same move as the previous state first
-        children.sort(key=lambda x: sorting_lookup[x.move], reverse=False)
+        children.sort(key=lambda x: (x.move - node.move) ** 2, reverse=False)
+        # we could delete the child with illigal move if the enemy is next to us and we cant move that way
 
-        if (time.time() - start_time) >= time_limit*pow(10,-3) or depth == 0 or (not children):
-            hook_pos = state.hook_positions # {0: (5, 12), 1: (11, 17)}
-            fish_pos = state.fish_positions # {0: (6, 14), 1: (18, 13), 2: (11, 16), 3: (8, 13), 4: (19, 11)}
-            fish_score = state.fish_scores # {0: 11, 1: 2, 2: 10, 3: 2, 4: 11}
-            fish_caught = state.get_caught() # (3, None) the fish_id is given
-            player_scores = state.get_player_scores()
+        # if max depth reached, end of game (terminate state) reached, time was just tried out
+        if (time.time() - start_time) >= time_limit*pow(10,-3):
+            global time_out
+            time_out = True
+        if time_out or depth == 0 or (not children):
+            
+            fish_pos = state.get_fish_positions()
+            fish_score = state.get_fish_scores()
+            hook_pos = state.get_hook_positions()
+            scores = state.get_player_scores()
+            caught = state.get_caught()
 
-            # use hash of hook positions and fish position as key
-            key = hash(str(state.hook_positions) + str(state.fish_positions))
-            """ # zobrest "hashing"
+            # RSC
+            
+            
+            # print(fish_pos) # {0: (7, 19), 1: (5, 15), 4: (19, 6)} with key = fish_number
+            # print(hook_pos) # {0: (8, 19), 1: (9, 16)}
+            # print(fish_to_type) # {'0': 11, '1': 1, '2': 10, '3': 1, '4': 11}
+                                  
+            # for fish_id, coordinates in fish_pos.items():
+            #     print("fish {} is at {},{} ad has type {}".format(fish_id, coordinates[0], coordinates[1], fish_to_type[str(fish_id)]))
+            
+            # calculate key-value of state
             key = 0
             for fish_id, coordinates in fish_pos.items():
                 # get fish-type to look up zobrist value
@@ -149,67 +161,53 @@ class PlayerControllerMinimax(PlayerController):
             # XOR with the hook positions
             key ^= zobristTable[ hook_pos[0][0] ][ hook_pos[0][1] ][ 'h1' ]
             key ^= zobristTable[ hook_pos[1][0] ][ hook_pos[1][1] ][ 'h2' ]
-            """
+            
             # check table for state
             global lookUpTable
             if key in lookUpTable.keys():
-                # print("used look up!!!!!!!!!!!!")
+                #print("used look up!!!!!!!!!!!!")
                 return lookUpTable[key]
             else:
-                # compute score and store it with key in look up table
+                # compute score and store with key in look up table
+            
                 # evaluation function
-                
-                #eval function_1 (gravity of fish to hook)
                 score_diff = 0
-                for fish_id, coordinates in fish_pos.items():
-                    if fish_id in fish_caught:
-                        score_diff += fish_score[fish_id]
-                    else:
-                        score_diff += (fish_score[fish_id] / (1 + min((hook_pos[0][0] - coordinates[0]) ** 2, (hook_pos[0][0] - coordinates[0] - 20) ** 2) + (hook_pos[0][1] - coordinates[1]) ** 2)
-                                    - fish_score[fish_id] / (1 + min((hook_pos[1][0] - coordinates[0]) ** 2, (hook_pos[1][0] - coordinates[0] - 20) ** 2) + (hook_pos[1][1] - coordinates[1]) ** 2))
                 
-                score = score_diff + player_scores[0] - player_scores[1]
-                # store score in look up table
+                for f in fish_pos.keys():
+                    if f in caught and (scores[0] + fish_score[f]) > max_score/2:
+                        score_diff += 10000000
+                    elif fish_score[f] < 0 and (hook_pos[0] == fish_pos[f]): 
+                        score_diff += fish_score[f]
+                    else:   
+                        score_diff += (fish_score[f] / (1 + min((hook_pos[0][0] - fish_pos[f][0]) ** 2, (hook_pos[0][0] - fish_pos[f][0] - 20) ** 2) + (hook_pos[0][1] - fish_pos[f][1]) ** 2)
+                                     - fish_score[f] / (1 + min((hook_pos[1][0] - fish_pos[f][0]) ** 2, (hook_pos[1][0] - fish_pos[f][0] - 20) ** 2) + (hook_pos[1][1] - fish_pos[f][1]) ** 2))
+                
+                #score_diff = sum([(fish_score[f] / (1 + shortest_distance_squared(hook_pos[0], fish_pos[f])) - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f]))) for f in fish_pos.keys()])
+                
+                # print("computed value---------------")
+                score = score_diff + scores[0] - scores[1]
+                # store in look up table
                 lookUpTable[key] = score
                 return score
-                """
-                #eval function_2 (single fish importance ratio)
-                risk_eval = [math.inf]
+            """
 
-                for fish_id, fish_coordinate in fish_pos.items():
-                    if fish_id not in fish_caught:
-                        dist_p1 = ( (hook_pos[0][0] - fish_coordinate[0])**2 + (hook_pos[0][1] - fish_coordinate[1])**2 ) / fish_score[fish_id]
-                        dist_p2 = ( (hook_pos[1][0] - fish_coordinate[0])**2 + (hook_pos[1][1] - fish_coordinate[1])**2 ) / fish_score[fish_id]
-                        if fish_score[fish_id] >= 0:
-                            risk_eval.append(dist_p2 - dist_p1)
-                
-                score = min(risk_eval)/2 + player_scores[0] - player_scores[1]
-                lookUpTable[key] = score
-                return score
-                """
-                """
-                #eval function_3 (single fish importance ratio)
-                fish_pos = state.get_fish_positions()
-                fish_score = state.get_fish_scores()
-                hook_pos = state.get_hook_positions()
-                curr_scores = state.get_player_scores()
-
-                fish_dist = [shortest_distance_squared(hook_pos[0], pos) for pos in fish_pos.values()]
-                if len(fish_dist) > beam:
-                    nearest_fish_idx = find_nearest_fish(fish_dist, list(fish_pos.keys()), beam)
-                    fish_score_diff = sum([fish_score[f] / (1 + dist)
-                                        - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f]))
-                                        for (f, dist) in zip(fish_pos.keys(), fish_dist) if f in nearest_fish_idx])
-                else:
-                    fish_score_diff = sum([fish_score[f] / (1 + dist)
-                                        - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f]))
-                                        for (f, dist) in zip(fish_pos.keys(), fish_dist)])
-
-                h_value = fish_score_diff + curr_scores[0] - curr_scores[1]
-                heuristic_tree[hashValue] = h_value
-                return h_value
-                """
-                
+            # without RSC
+            # evaluation function
+            score_diff = 0
+            
+            for f in fish_pos.keys():
+                if f in caught and (scores[0] + fish_score[f]) > max_score/2:
+                    score_diff = 10000000
+                elif fish_score[f] < 0 and (hook_pos[0] == fish_pos[f]): 
+                    score_diff += fish_score[f]
+                else:   
+                    score_diff += (fish_score[f] / (1 + min((hook_pos[0][0] - fish_pos[f][0]) ** 2, (hook_pos[0][0] - fish_pos[f][0] - 20) ** 2) + (hook_pos[0][1] - fish_pos[f][1]) ** 2)
+                                    - fish_score[f] / (1 + min((hook_pos[1][0] - fish_pos[f][0]) ** 2, (hook_pos[1][0] - fish_pos[f][0] - 20) ** 2) + (hook_pos[1][1] - fish_pos[f][1]) ** 2))
+            
+            score = score_diff + scores[0] - scores[1]
+            return score
+            """
+            
                 
 
         elif state.get_player() == 0:
@@ -226,7 +224,6 @@ class PlayerControllerMinimax(PlayerController):
                 beta = min(beta, v)
                 if beta <= alpha:
                     break
-        
         return v
 
 
@@ -249,27 +246,32 @@ class PlayerControllerMinimax(PlayerController):
         #       with its compute_and_get_children() method!
         
         child_nodes = initial_tree_node.compute_and_get_children()
+        child_v = []
+        prevBestMovesVal = -100000
         bestMove = 0
         # iterative deepening
         global start_time
         start_time = time.time()
-        prevBestMovesVal = -100000
-        depth_level = 1
+        global time_out
+        time_out = False
+        depth_level = 2
 
-        while (time.time() - start_time) <= time_limit * pow(10,-3):
+        #print(len(lookUpTable))
+        
+        while not time_out:
             child_v = []
             for child in child_nodes:
-                    child_v.append(self.alphabeta(child, depth_level, -float('inf'), float('inf')))
+                child_v.append(self.alphabeta(child, depth_level, -float('inf'), float('inf')))
             
-            depth_level += 1
-
             # check if partially checked tree returns better result then previous iteration
             max_val_of_current_iteration = max(child_v)
+            
             if max_val_of_current_iteration > prevBestMovesVal:
                 prevBestMovesVal = max_val_of_current_iteration
                 bestMove = (child_nodes[child_v.index(max_val_of_current_iteration)]).move
+            
+            depth_level += 1
         
-        print(depth_level)
-        
+        #print(depth_level)
         return ACTION_TO_STR[bestMove]
 
