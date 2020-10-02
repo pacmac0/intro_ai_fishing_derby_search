@@ -24,7 +24,7 @@ sorting_lookup = {
                     2:[2,3,4,0,1],
                     3:[3,1,2,0,4],
                     4:[4,1,2,0,3]}
-nearest_neighbor = 4
+nearest_neighbor = 2
 
 class PlayerControllerHuman(PlayerController):
     def player_loop(self):
@@ -55,6 +55,9 @@ class PlayerControllerMinimax(PlayerController):
             return horizontal_diff ** 2 + (pos1[1] - pos2[1]) ** 2
         else:
             return (20 - horizontal_diff) ** 2 + (pos1[1] - pos2[1]) ** 2
+
+    def find_nearest_fish(self, fish_dist, fish_id, n):
+        return [fish_id[fish_dist.index(d)] for d in (sorted(fish_dist, reverse=False))[:n]]
 
     def player_loop(self):
         """
@@ -148,8 +151,8 @@ class PlayerControllerMinimax(PlayerController):
             player_scores = state.get_player_scores()
 
             # use hash of hook positions and fish position as key
-            key = hash(str(state.hook_positions) + str(state.fish_positions))
-            """ # zobrest "hashing"
+            # key = hash(str(state.hook_positions) + str(state.fish_positions))
+            # zobrest "hashing"
             key = 0
             for fish_id, coordinates in fish_pos.items():
                 # get fish-type to look up zobrist value
@@ -157,62 +160,62 @@ class PlayerControllerMinimax(PlayerController):
             # XOR with the hook positions
             key ^= zobristTable[ hook_pos[0][0] ][ hook_pos[0][1] ][ 'h1' ]
             key ^= zobristTable[ hook_pos[1][0] ][ hook_pos[1][1] ][ 'h2' ]
-            """
+            
             # check table for state
             global lookUpTable
             if key in lookUpTable.keys():
                 # print("used look up!!!!!!!!!!!!")
                 return lookUpTable[key]
-            else:
-                # compute score and store it with key in look up table
-                # evaluation function
-                """
-                #eval function_1 (gravity of fish to hook)
-                score_diff = 0
-                for fish_id, coordinates in fish_pos.items():
-                    if fish_id in fish_caught:
-                        score_diff += fish_score[fish_id]
-                    else:
-                        score_diff += (fish_score[fish_id] / (1 + min((hook_pos[0][0] - coordinates[0]) ** 2, (hook_pos[0][0] - coordinates[0] - 20) ** 2) + (hook_pos[0][1] - coordinates[1]) ** 2)
-                                    - fish_score[fish_id] / (1 + min((hook_pos[1][0] - coordinates[0]) ** 2, (hook_pos[1][0] - coordinates[0] - 20) ** 2) + (hook_pos[1][1] - coordinates[1]) ** 2))
-                
-                score = score_diff + player_scores[0] - player_scores[1]
-                # store score in look up table
-                lookUpTable[key] = score
-                return score
-                """
-                """
-                #eval function_2 (single fish importance ratio)
-                risk_eval = [math.inf]
-
-                for fish_id, fish_coordinate in fish_pos.items():
-                    if fish_id not in fish_caught:
-                        dist_p1 = ( (hook_pos[0][0] - fish_coordinate[0])**2 + (hook_pos[0][1] - fish_coordinate[1])**2 ) / fish_score[fish_id]
-                        dist_p2 = ( (hook_pos[1][0] - fish_coordinate[0])**2 + (hook_pos[1][1] - fish_coordinate[1])**2 ) / fish_score[fish_id]
-                        if fish_score[fish_id] >= 0:
-                            risk_eval.append(dist_p2 - dist_p1)
-                
-                score = min(risk_eval)/2 + player_scores[0] - player_scores[1]
-                lookUpTable[key] = score
-                return score
-                """
-                
-                #eval function_3 (single fish importance ratio)
-
-                fish_dist = [self.shortest_distance_squared(hook_pos[0], pos) for pos in fish_pos.values()]
-                if len(fish_dist) > nearest_neighbor:
-                    nearest_fish_idx = find_nearest_fish(fish_dist, list(fish_pos.keys()), nearest_neighbor)
-                    fish_score_diff = sum([fish_score[f] / (1 + dist)
-                                        - fish_score[f] / (1 + self.shortest_distance_squared(hook_pos[1], fish_pos[f]))
-                                        for (f, dist) in zip(fish_pos.keys(), fish_dist) if f in nearest_fish_idx])
+        
+            # compute score and store it with key in look up table
+            # evaluation function
+            """
+            #eval function_1 (gravity of fish to hook)
+            score_diff = 0
+            for fish_id, coordinates in fish_pos.items():
+                if fish_id in fish_caught:
+                    score_diff += fish_score[fish_id]
                 else:
-                    fish_score_diff = sum([fish_score[f] / (1 + dist)
-                                        - fish_score[f] / (1 + self.shortest_distance_squared(hook_pos[1], fish_pos[f]))
-                                        for (f, dist) in zip(fish_pos.keys(), fish_dist)])
+                    score_diff += (fish_score[fish_id] / (1 + min((hook_pos[0][0] - coordinates[0]) ** 2, (hook_pos[0][0] - coordinates[0] - 20) ** 2) + (hook_pos[0][1] - coordinates[1]) ** 2)
+                                - fish_score[fish_id] / (1 + min((hook_pos[1][0] - coordinates[0]) ** 2, (hook_pos[1][0] - coordinates[0] - 20) ** 2) + (hook_pos[1][1] - coordinates[1]) ** 2))
+            
+            score = score_diff + player_scores[0] - player_scores[1]
+            # store score in look up table
+            lookUpTable[key] = score
+            return score
+            """
+            """
+            #eval function_2 (single fish importance ratio)
+            risk_eval = [math.inf]
 
-                score = fish_score_diff + player_scores[0] - player_scores[1]
-                lookUpTable[key] = score
-                return score
+            for fish_id, fish_coordinate in fish_pos.items():
+                if fish_id not in fish_caught:
+                    dist_p1 = ( (hook_pos[0][0] - fish_coordinate[0])**2 + (hook_pos[0][1] - fish_coordinate[1])**2 ) / fish_score[fish_id]
+                    dist_p2 = ( (hook_pos[1][0] - fish_coordinate[0])**2 + (hook_pos[1][1] - fish_coordinate[1])**2 ) / fish_score[fish_id]
+                    if fish_score[fish_id] >= 0:
+                        risk_eval.append(dist_p2 - dist_p1)
+            
+            score = min(risk_eval)/2 + player_scores[0] - player_scores[1]
+            lookUpTable[key] = score
+            return score
+            """
+            
+            #eval function_3 (single fish importance ratio)
+
+            fish_dist = [self.shortest_distance_squared(hook_pos[0], pos) for pos in fish_pos.values()]
+            if len(fish_dist) > nearest_neighbor:
+                nearest_fish_idx = self.find_nearest_fish(fish_dist, list(fish_pos.keys()), nearest_neighbor)
+                fish_score_diff = sum([fish_score[f] / (1 + dist)
+                                    - fish_score[f] / (1 + self.shortest_distance_squared(hook_pos[1], fish_pos[f]))
+                                    for (f, dist) in zip(fish_pos.keys(), fish_dist) if f in nearest_fish_idx])
+            else:
+                fish_score_diff = sum([fish_score[f] / (1 + dist)
+                                    - fish_score[f] / (1 + self.shortest_distance_squared(hook_pos[1], fish_pos[f]))
+                                    for (f, dist) in zip(fish_pos.keys(), fish_dist)])
+
+            score = fish_score_diff + player_scores[0] - player_scores[1]
+            lookUpTable[key] = score
+            return score
                 
                 
                 
