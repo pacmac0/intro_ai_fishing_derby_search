@@ -15,7 +15,7 @@ zobristTable = []
 lookUpTable = dict()
 # variables for iterative deepening
 start_time = 0
-time_limit = 55 # 2 digits!
+time_limit = 60 # 2 digits!
 max_score = 0
 # variables for move ordering
 sorting_lookup = {
@@ -158,7 +158,7 @@ class PlayerControllerMinimax(PlayerController):
             else:
                 # compute score and store it with key in look up table
                 # evaluation function
-                
+                """
                 #eval function_1 (gravity of fish to hook)
                 score_diff = 0
                 for fish_id, coordinates in fish_pos.items():
@@ -172,6 +172,7 @@ class PlayerControllerMinimax(PlayerController):
                 # store score in look up table
                 lookUpTable[key] = score
                 return score
+                """
                 """
                 #eval function_2 (single fish importance ratio)
                 risk_eval = [math.inf]
@@ -187,12 +188,12 @@ class PlayerControllerMinimax(PlayerController):
                 lookUpTable[key] = score
                 return score
                 """
-                """
+                
                 #eval function_3 (single fish importance ratio)
                 fish_pos = state.get_fish_positions()
                 fish_score = state.get_fish_scores()
                 hook_pos = state.get_hook_positions()
-                curr_scores = state.get_player_scores()
+                player_scores = state.get_player_scores()
 
                 fish_dist = [shortest_distance_squared(hook_pos[0], pos) for pos in fish_pos.values()]
                 if len(fish_dist) > beam:
@@ -205,10 +206,10 @@ class PlayerControllerMinimax(PlayerController):
                                         - fish_score[f] / (1 + shortest_distance_squared(hook_pos[1], fish_pos[f]))
                                         for (f, dist) in zip(fish_pos.keys(), fish_dist)])
 
-                h_value = fish_score_diff + curr_scores[0] - curr_scores[1]
-                heuristic_tree[hashValue] = h_value
+                h_value = fish_score_diff + player_scores[0] - player_scores[1]
+                lookUpTable[key] = h_value
                 return h_value
-                """
+                
                 
                 
 
