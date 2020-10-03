@@ -15,7 +15,7 @@ zobristTable = []
 lookUpTable = dict()
 # variables for iterative deepening
 start_time = 0
-time_limit = 60 # 2 digits!
+time_limit = 50 # 2 digits!
 max_score = 0
 # variables for move ordering
 sorting_lookup = {
@@ -24,7 +24,7 @@ sorting_lookup = {
                     2:[2,3,4,0,1],
                     3:[3,1,2,0,4],
                     4:[4,1,2,0,3]}
-nearest_neighbor = 2
+nearest_neighbor = 3
 
 class PlayerControllerHuman(PlayerController):
     def player_loop(self):
@@ -143,7 +143,7 @@ class PlayerControllerMinimax(PlayerController):
         # move ordering, to evaluate the states with the same move as the previous state first
         children.sort(key=lambda x: sorting_lookup[x.move], reverse=False)
 
-        if (time.time() - start_time) >= time_limit*pow(10,-3) or depth == 0 or (not children):
+        if depth == 0 or (not children):
             hook_pos = state.hook_positions # {0: (5, 12), 1: (11, 17)}
             fish_pos = state.fish_positions # {0: (6, 14), 1: (18, 13), 2: (11, 16), 3: (8, 13), 4: (19, 11)}
             fish_score = state.fish_scores # {0: 11, 1: 2, 2: 10, 3: 2, 4: 11}
@@ -151,8 +151,9 @@ class PlayerControllerMinimax(PlayerController):
             player_scores = state.get_player_scores()
 
             # use hash of hook positions and fish position as key
-            # key = hash(str(state.hook_positions) + str(state.fish_positions))
+            key = hash(str(state.hook_positions) + str(state.fish_positions))
             # zobrest "hashing"
+            """
             key = 0
             for fish_id, coordinates in fish_pos.items():
                 # get fish-type to look up zobrist value
@@ -160,7 +161,7 @@ class PlayerControllerMinimax(PlayerController):
             # XOR with the hook positions
             key ^= zobristTable[ hook_pos[0][0] ][ hook_pos[0][1] ][ 'h1' ]
             key ^= zobristTable[ hook_pos[1][0] ][ hook_pos[1][1] ][ 'h2' ]
-            
+            """
             # check table for state
             global lookUpTable
             if key in lookUpTable.keys():
@@ -169,22 +170,24 @@ class PlayerControllerMinimax(PlayerController):
         
             # compute score and store it with key in look up table
             # evaluation function
-            """
-            #eval function_1 (gravity of fish to hook)
-            score_diff = 0
-            for fish_id, coordinates in fish_pos.items():
-                if fish_id in fish_caught:
-                    score_diff += fish_score[fish_id]
-                else:
-                    score_diff += (fish_score[fish_id] / (1 + min((hook_pos[0][0] - coordinates[0]) ** 2, (hook_pos[0][0] - coordinates[0] - 20) ** 2) + (hook_pos[0][1] - coordinates[1]) ** 2)
-                                - fish_score[fish_id] / (1 + min((hook_pos[1][0] - coordinates[0]) ** 2, (hook_pos[1][0] - coordinates[0] - 20) ** 2) + (hook_pos[1][1] - coordinates[1]) ** 2))
             
-            score = score_diff + player_scores[0] - player_scores[1]
+            #eval function_1 (gravity of fish to hook)
+            score_diff = [0]
+            for fish_id, coordinates in fish_pos.items():
+                if fish_id == fish_caught[0]:
+                    score_diff.append(fish_score[fish_id])
+                elif fish_id == fish_caught[1]:
+                    score_diff.append(-fish_score[fish_id])
+                else:
+                    score_diff.append(fish_score[fish_id] / (1 + min((hook_pos[0][0] - coordinates[0]) ** 2, (hook_pos[0][0] - coordinates[0] - 20) ** 2) + (hook_pos[0][1] - coordinates[1]) ** 2)
+                                    - fish_score[fish_id] / (1 + min((hook_pos[1][0] - coordinates[0]) ** 2, (hook_pos[1][0] - coordinates[0] - 20) ** 2) + (hook_pos[1][1] - coordinates[1]) ** 2))
+            
+            score = max(score_diff) + player_scores[0] - player_scores[1]
             # store score in look up table
             lookUpTable[key] = score
             return score
+            
             """
-
             #eval function_2.1 (single fish importance ratio)
             h_val_list = [math.inf]
 
@@ -201,7 +204,7 @@ class PlayerControllerMinimax(PlayerController):
             score = min(h_val_list) + player_scores[0] - player_scores[1]
             lookUpTable[key] = score
             return score
-
+            """
             """
             #eval function_2.2 (single fish importance ratio)
             h_val_list = [math.inf]
@@ -236,6 +239,7 @@ class PlayerControllerMinimax(PlayerController):
             lookUpTable[key] = score
             return score
             """
+            
                 
                 
                 
@@ -245,14 +249,14 @@ class PlayerControllerMinimax(PlayerController):
             for child in children:
                 v = max(v, self.alphabeta(child, depth - 1, alpha, beta))
                 alpha = max(alpha, v)
-                if beta <= alpha:
+                if beta <= alpha or (time.time() - start_time) >= time_limit*pow(10,-3):
                     break
         else:
             v = float('inf')
             for child in children:
                 v = min(v, self.alphabeta(child, depth - 1, alpha, beta))
                 beta = min(beta, v)
-                if beta <= alpha:
+                if beta <= alpha or (time.time() - start_time) >= time_limit*pow(10,-3):
                     break
         
         return v
@@ -276,11 +280,13 @@ class PlayerControllerMinimax(PlayerController):
         # NOTE: Don't forget to initialize the children of the current node 
         #       with its compute_and_get_children() method!
         
-        child_nodes = initial_tree_node.compute_and_get_children()
-        bestMove = 0
         # iterative deepening
         global start_time
         start_time = time.time()
+
+        child_nodes = initial_tree_node.compute_and_get_children()
+        bestMove = 0
+        
         prevBestMovesVal = -100000
         depth_level = 1
 
@@ -297,7 +303,7 @@ class PlayerControllerMinimax(PlayerController):
                 prevBestMovesVal = max_val_of_current_iteration
                 bestMove = (child_nodes[child_v.index(max_val_of_current_iteration)]).move
         
-        print(depth_level)
+        #print(depth_level+1)
         
         return ACTION_TO_STR[bestMove]
 

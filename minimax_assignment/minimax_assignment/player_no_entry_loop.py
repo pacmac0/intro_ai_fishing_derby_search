@@ -15,7 +15,7 @@ zobristTable = []
 lookUpTable = dict()
 # variables for iterative deepening
 start_time = 0
-time_limit = 55 # 2 digits!
+time_limit = 60 # 2 digits!
 max_score = 0
 # variables for move ordering
 sorting_lookup = {
@@ -143,7 +143,7 @@ class PlayerControllerMinimax(PlayerController):
         # move ordering, to evaluate the states with the same move as the previous state first
         children.sort(key=lambda x: sorting_lookup[x.move], reverse=False)
 
-        if depth == 0 or (not children):
+        if (time.time() - start_time) >= time_limit*pow(10,-3) or depth == 0 or (not children):
             hook_pos = state.hook_positions # {0: (5, 12), 1: (11, 17)}
             fish_pos = state.fish_positions # {0: (6, 14), 1: (18, 13), 2: (11, 16), 3: (8, 13), 4: (19, 11)}
             fish_score = state.fish_scores # {0: 11, 1: 2, 2: 10, 3: 2, 4: 11}
@@ -170,44 +170,37 @@ class PlayerControllerMinimax(PlayerController):
         
             # compute score and store it with key in look up table
             # evaluation function
-            """
+            # TODO take into account the fish on the hook!!! if it is on my hook give it extra value!!!
+
             #eval function_1 (gravity of fish to hook)
             score_diff = [0]
             for fish_id, coordinates in fish_pos.items():
-                if fish_id == fish_caught[0]:
-                    score_diff.append(fish_score[fish_id])
-                elif fish_id == fish_caught[1]:
-                    score_diff.append(-fish_score[fish_id])
-                else:
-                    score_diff.append((fish_score[fish_id] / (1 + min((hook_pos[0][0] - coordinates[0]) ** 2, (hook_pos[0][0] - coordinates[0] - 20) ** 2) + (hook_pos[0][1] - coordinates[1]) ** 2)
-                                     - fish_score[fish_id] / (1 + min((hook_pos[1][0] - coordinates[0]) ** 2, (hook_pos[1][0] - coordinates[0] - 20) ** 2) + (hook_pos[1][1] - coordinates[1]) ** 2))-coordinates[1])
+                score_diff.append(fish_score[fish_id] / (1 + min((hook_pos[0][0] - coordinates[0]) ** 2, (hook_pos[0][0] - coordinates[0] - 20) ** 2) + (hook_pos[0][1] - coordinates[1]) ** 2) - coordinates[1]
+                                - fish_score[fish_id] / (1 + min((hook_pos[1][0] - coordinates[0]) ** 2, (hook_pos[1][0] - coordinates[0] - 20) ** 2) + (hook_pos[1][1] - coordinates[1]) ** 2) - coordinates[1])
             
             score = max(score_diff) + player_scores[0] - player_scores[1]
             # store score in look up table
-            lookUpTable[key] = score
-            return score
-            """
+            lookUpTable[key] = (score, node.move)
+            return (score, node.move)
             
+            """
             #eval function_2.1 (single fish importance ratio)
             h_val_list = [math.inf]
 
             for fish_id, fish_coordinate in fish_pos.items():
-                if fish_id == fish_caught[0]:
-                    h_val_list.append(-fish_score[fish_id])
-                elif fish_id == fish_caught[1]:
-                    h_val_list.append(fish_score[fish_id])
-                else:
+                if fish_id not in fish_caught:
                     dist_p1 = ( (hook_pos[0][0] - fish_coordinate[0])**2 + 
                                 (hook_pos[0][1] - fish_coordinate[1])**2 )
                     dist_p2 = ( (hook_pos[1][0] - fish_coordinate[0])**2 + 
                                 (hook_pos[1][1] - fish_coordinate[1])**2 )
                     ratio = dist_p2 / (dist_p1 + 1e-4)
-                    h_val_list.append(ratio * fish_score[fish_id])
-        
-            score = min(h_val_list) + player_scores[0] - player_scores[1]
-            lookUpTable[key] = score
-            return score
+                    if fish_score[fish_id] >= 0:
+                        h_val_list.append(ratio * fish_score[fish_id])
             
+            score = min(h_val_list) + player_scores[0] - player_scores[1]
+            lookUpTable[key] = (score, node.move)
+            return (score, node.move)
+            """
             """
             #eval function_2.2 (single fish importance ratio)
             h_val_list = [math.inf]
@@ -221,9 +214,9 @@ class PlayerControllerMinimax(PlayerController):
                     if fish_score[fish_id] >= 0:
                         h_val_list.append(dist_p2 - dist_p1)
             
-            score = min(h_val_list) # + player_scores[0] - player_scores[1]
-            lookUpTable[key] = score
-            return score
+            score = min(h_val_list) + player_scores[0] - player_scores[1]
+            lookUpTable[key] = (score, node.move)
+            return (score, node.move)
             """
             """
             #eval function_3 (short sigted)
@@ -239,32 +232,34 @@ class PlayerControllerMinimax(PlayerController):
                                     for (f, dist) in zip(fish_pos.keys(), fish_dist)])
 
             score = fish_score_diff + player_scores[0] - player_scores[1]
-            lookUpTable[key] = score
-            return score
+            lookUpTable[key] = (score, node.move)
+            return (score, node.move)
             """
-            
-                
-                
-                
-
-        elif state.get_player() == 0:
-            v = -float('inf')
-            for child in children:
-                v = max(v, self.alphabeta(child, depth - 1, alpha, beta))
-                alpha = max(alpha, v)
-                if beta <= alpha or (time.time() - start_time) >= time_limit*pow(10,-3):
-                    break
-        else:
-            v = float('inf')
-            for child in children:
-                v = min(v, self.alphabeta(child, depth - 1, alpha, beta))
-                beta = min(beta, v)
-                if beta <= alpha or (time.time() - start_time) >= time_limit*pow(10,-3):
-                    break
         
-        return v
-
-
+        elif state.get_player() == 0:
+            val = -float('inf')
+            move = 0
+            for child in children:
+                new_val, new_move = self.alphabeta(child, depth - 1, alpha, beta)
+                if new_val > val: # maximize
+                    val = new_val
+                    move = new_move
+                alpha = max(alpha, val)
+                if beta <= alpha:
+                    break
+            return val, move 
+        else:
+            val = float('inf')
+            move = 0
+            for child in children:
+                new_val, new_move = self.alphabeta(child, depth - 1, alpha, beta)
+                if new_val < val: # minimize
+                    val = new_val
+                    move = new_move
+                beta = min(beta, val)
+                if beta <= alpha:
+                    break
+            return val, move 
 
     def search_best_next_move(self, model, initial_tree_node):
         """
@@ -286,27 +281,21 @@ class PlayerControllerMinimax(PlayerController):
         # iterative deepening
         global start_time
         start_time = time.time()
-
-        child_nodes = initial_tree_node.compute_and_get_children()
-        bestMove = 0
         
-        prevBestMovesVal = -100000
+        bestMove = [-float('inf'), 0]
         depth_level = 1
 
         while (time.time() - start_time) <= time_limit * pow(10,-3):
-            child_v = []
-            for child in child_nodes:
-                    child_v.append(self.alphabeta(child, depth_level, -float('inf'), float('inf')))
-            
+            val_of_current_iteration, current_best_move = self.alphabeta(initial_tree_node, depth_level, -float('inf'), float('inf'))
             depth_level += 1
 
             # check if partially checked tree returns better result then previous iteration
-            max_val_of_current_iteration = max(child_v)
-            if max_val_of_current_iteration > prevBestMovesVal:
-                prevBestMovesVal = max_val_of_current_iteration
-                bestMove = (child_nodes[child_v.index(max_val_of_current_iteration)]).move
+            
+            if val_of_current_iteration > bestMove[0]:
+                bestMove[0] = val_of_current_iteration
+                bestMove[1] = current_best_move
+            
+        print(depth_level)
         
-        #print(depth_level+1)
-        
-        return ACTION_TO_STR[bestMove]
+        return ACTION_TO_STR[bestMove[1]]
 
